@@ -1,0 +1,378 @@
+% Proposed-method section for the UC-RCF manuscript.
+% Requires: amsmath, amssymb, booktabs, adjustbox.
+%
+% IMPORTANT---AUTHOR-ONLY PRE-SUBMISSION ALIGNMENT CHECKS (not rendered):
+% 1. The current notebook sets BASE_VARIANT from the globally ranked ablation.
+%    For the primary endpoint, either fix the residual-scale variant a priori or
+%    select it inside every outer asset fold, then regenerate all headline results.
+% 2. causal_roll currently applies bfill() to the first undefined samples. Replace
+%    this with a past-only initialization before claiming strictly causal features.
+% 3. The calibration-score "leave-self-out" correction in fit_variants has a
+%    one-count discrepancy. Use rank/n after removing self, then rerun thresholds.
+% 4. Replace the tautological donor-exclusion assertions in Cell 10 with explicit
+%    set-intersection checks before calling the protocol leakage-resistant.
+% 5. fit_variants currently counts missing channel p-values as non-firing in the
+%    fraction score. Divide by the number of observed monitored channels, as
+%    defined below, and regenerate the affected score and alarm results.
+
+\section{Proposed method}
+\label{sec:proposed_method}
+
+\subsection{Overview and deployment setting}
+
+The proposed uncertainty-calibrated residual conformal framework (UC-RCF)
+addresses a deployment setting in which a target turbine has an available
+healthy historical partition, but alarm calibration and operating-policy
+selection must transfer across assets. This distinction is important: UC-RCF
+is asset-adaptive rather than zero-shot. A normal-behavior model is estimated
+from the designated healthy history of each target turbine, whereas the
+case-level false-alarm behavior is calibrated using verified-normal prediction
+periods from other turbines. The resulting separation prevents the prediction
+period of a held-out asset from influencing its operating point.
+
+Let $c\in\mathcal{C}$ index a labeled monitoring case, $a(c)$ its turbine, and
+$f(c)$ its wind farm. Each case contains a chronologically ordered training
+partition $\mathcal{T}^{\mathrm{tr}}_c$ and prediction partition
+$\mathcal{T}^{\mathrm{pr}}_c$. At time $t$, the SCADA record is divided into an
+operating vector $\mathbf{x}_{ct}\in\mathbb{R}^{d_c}$ and a vector of condition
+responses $\mathbf{y}_{ct}\in\mathbb{R}^{m_c}$. Only rows satisfying the
+dataset-defined normal operating states, $s_{ct}\in\{0,2\}$, are admitted to
+normal-behavior fitting. Event annotations and case labels are not used to fit
+the regression model or construct channel-wise conformal scores; they are used
+only for development-fold policy selection and final evaluation.
+
+UC-RCF comprises six stages: (i) farm-specific channel taxonomy and nonlinear
+operating-feature construction; (ii) embargoed blocked cross-fitting of a
+multi-output normal-behavior model; (iii) target screening and uncertainty
+standardization of cross-fitted residuals; (iv) channel-wise conformal evidence
+aggregation; (v) persistence-sensitive criticality accumulation; and (vi)
+cross-asset calibration nested within leave-one-asset-out evaluation.
+
+\subsection{Channel taxonomy and nonlinear operating representation}
+
+The channel taxonomy is constructed from the CARE feature metadata and is
+fixed independently of the event labels. Only average-value SCADA channels are
+used. Wind speed, active and reactive power, rotor and generator speed,
+ambient or nacelle temperature, pitch, and yaw-related variables form the
+operating set. Counters are excluded, angular variables are encoded separately,
+and all remaining nonconstant measurements form candidate condition-response
+channels. This separation prevents a response channel from simultaneously
+entering the model as an explanatory driver.
+
+For each case, missing operating values are imputed using medians calculated
+only from normal training rows. Every continuous driver is subsequently
+standardized using the corresponding training mean and standard deviation and
+clipped to $[-8,8]$. Denoting the standardized driver vector by
+$\mathbf{z}_{ct}$, the nonlinear design is
+\begin{equation}
+\boldsymbol{\phi}_{ct}=
+\left[
+1,
+\mathbf{z}_{ct}^{\top},
+(\mathbf{z}_{ct}\odot\mathbf{z}_{ct})^{\top},
+\left\{\mathcal{R}_{w}(\mathbf{z}_{ct,\mathcal{J}})^{\top}\right\}_{w\in\{6,36,144\}},
+\left\{z_{ctj}z_{ctk}\right\}_{j<k;\,j,k\in\mathcal{J}},
+\sin(\boldsymbol{\theta}_{ct})^{\top},
+\cos(\boldsymbol{\theta}_{ct})^{\top}
+\right]^{\top},
+\label{eq:nonlinear_design}
+\end{equation}
+where $\mathcal{J}$ contains at most six core operating drivers and
+$\mathcal{R}_{w}(\cdot)$ is a past-only rolling mean. At the nominal 10-min
+sampling interval, $w\in\{6,36,144\}$ represents 1~h, 6~h, and 24~h operating
+contexts, respectively. Equation~\eqref{eq:nonlinear_design} captures smooth
+nonlinearity, interactions among dominant load variables, multiscale operating
+history, and the periodic geometry of angular measurements without requiring a
+high-capacity black-box model.
+
+Candidate response channels are retained only when they have finite training
+mean, non-negligible variance, and more than 50\% observed normal-training
+values. Each retained response is standardized using its normal-training mean
+and standard deviation. Missing standardized responses in the shared
+multi-output regression solve are assigned their training-mean value (zero in
+standardized units); unobserved prediction responses are excluded from the
+subsequent evidence aggregation.
+
+\subsection{Embargoed cross-fitted normal-behavior model}
+
+Let $\mathbf{\Phi}_c$ be the design matrix formed by stacking
+$\boldsymbol{\phi}_{ct}^{\top}$ over the normal training rows and let
+$\mathbf{Y}_c$ contain the standardized candidate responses. UC-RCF estimates a
+shared multi-output ridge model,
+\begin{equation}
+\widehat{\mathbf{B}}_{c,\lambda}
+=\underset{\mathbf{B}}{\operatorname*{arg\,min}}
+\left\|\mathbf{Y}_c-\mathbf{\Phi}_c\mathbf{B}\right\|_F^2
++\lambda\left\|\mathbf{B}\right\|_F^2,
+\label{eq:ridge_objective}
+\end{equation}
+which provides one coherent operating representation for all response channels.
+If $\mathbf{\Phi}_c=\mathbf{U}\operatorname{diag}(\mathbf{s})\mathbf{V}^{\top}$,
+the solution is evaluated efficiently as
+\begin{equation}
+\widehat{\mathbf{B}}_{c,\lambda}
+=\mathbf{V}\operatorname{diag}\!\left(
+\frac{s_{\ell}}{s_{\ell}^{2}+\lambda}
+\right)\mathbf{U}^{\top}\mathbf{Y}_c,
+\label{eq:ridge_svd}
+\end{equation}
+allowing the full regularization path to share a single economy-size singular
+value decomposition.
+
+Random cross-validation is inappropriate for serially correlated SCADA data.
+The normal training sequence is therefore divided into contiguous 432-sample
+blocks (3~days at 10-min resolution), assigned round-robin to $K=5$ folds. When
+a fold is held out, an embargo of 144 samples (24~h) is removed on both sides of
+each held block before model fitting. The candidate grid is
+$\Lambda=\{10^{-2},10^{-1},10^{0},\ldots,10^{5}\}$. For response $j$, let
+$R^{2}_{cj}(\lambda)$ denote the coefficient of determination computed from
+its embargoed out-of-fold predictions. A single case-level regularizer is
+selected by
+\begin{equation}
+\lambda_c^{\star}=
+\underset{\lambda\in\Lambda}{\operatorname*{arg\,max}}
+\operatorname{median}_{j}\,R^{2}_{cj}(\lambda).
+\label{eq:lambda_selection}
+\end{equation}
+Responses satisfying $R^{2}_{cj}(\lambda_c^{\star})\geq0.30$ form the monitored
+set $\mathcal{M}_c$. If fewer than five responses pass this threshold, the best
+$\max(5,\lfloor m_c/5\rfloor)$ responses are retained. This fallback guarantees
+multichannel evidence while making weakly predictable channels less influential.
+The out-of-fold residuals
+$e^{\mathrm{cal}}_{ctj}=y_{ctj}-\widehat{y}^{(-k(t))}_{ctj}$ constitute the
+calibration sample. The model is then refitted on all normal training rows and
+applied once to $\mathcal{T}^{\mathrm{pr}}_c$ to obtain prediction residuals
+$e^{\mathrm{pr}}_{ctj}$.
+
+\subsection{Residual standardization and extrapolation-aware scaling}
+
+The primary UC-RCF configuration estimates a channel scale from cross-fitted
+residuals,
+\begin{equation}
+\widehat{\sigma}_{cj}=
+\max\left\{\operatorname{sd}_{t}
+\left(e^{\mathrm{cal}}_{ctj}\right),10^{-6}\right\}.
+\label{eq:global_scale}
+\end{equation}
+To reduce overreaction when the operating vector lies outside well-supported
+regions of the nonlinear design, this scale is adjusted by regularized
+prediction leverage. For a new design vector $\boldsymbol{\phi}_{ct}$,
+\begin{equation}
+h_{ct}=\sum_{\ell}
+\left(\boldsymbol{\phi}_{ct}^{\top}\mathbf{v}_{\ell}\right)^2
+\frac{s_{\ell}^{2}}{(s_{\ell}^{2}+\lambda_c^{\star})^{2}},
+\label{eq:regularized_leverage}
+\end{equation}
+and the nonconformity score becomes
+\begin{equation}
+z_{ctj}=
+\frac{|e_{ctj}|}
+{\widehat{\sigma}_{cj}\sqrt{1+h_{ct}}}.
+\label{eq:nonconformity}
+\end{equation}
+Thus, an equally sized residual contributes less evidence when it occurs in a
+poorly supported operating region. A heteroscedastic alternative that predicts
+$\log(e_{ctj}^{2}+\epsilon)$ from the same design is retained as an ablation,
+not silently combined with the primary configuration.
+
+\subsection{Channel-wise conformal evidence}
+
+For each monitored response $j$, let
+$\mathcal{Z}_{cj}=\{z^{\mathrm{cal}}_{cij}\}_{i=1}^{n_{cj}}$ be its finite
+cross-fitted nonconformity scores. The rank-based conformal value assigned to a
+prediction score $z^{\mathrm{pr}}_{ctj}$ is
+\begin{equation}
+p_{ctj}=
+\frac{1+\sum_{i=1}^{n_{cj}}
+\mathbf{1}\!\left(z^{\mathrm{cal}}_{cij}\geq z^{\mathrm{pr}}_{ctj}\right)}
+{n_{cj}+1}.
+\label{eq:conformal_pvalue}
+\end{equation}
+Small values indicate that the response is unusual relative to its own
+cross-fitted healthy behavior. For a calibration observation $i$, the analogous
+leave-one-out rank is
+\begin{equation*}
+p^{\mathrm{cal}}_{cij}=
+\frac{1+\sum_{r\neq i}
+\mathbf{1}\!\left(z^{\mathrm{cal}}_{crj}\geq z^{\mathrm{cal}}_{cij}\right)}
+{n_{cj}},
+\end{equation*}
+so that a score is never used to rank itself. Two aggregate statistics are
+available:
+\begin{align}
+A^{\mathrm{mean}}_{ct}
+&=\frac{1}{|\mathcal{M}_{ct}|}
+\sum_{j\in\mathcal{M}_{ct}}-\log_{10}(p_{ctj}),
+\label{eq:mean_evidence}\\
+A^{\mathrm{frac}}_{ct}
+&=\frac{1}{|\mathcal{M}_{ct}|}
+\sum_{j\in\mathcal{M}_{ct}}
+\mathbf{1}(p_{ctj}<\gamma),\qquad \gamma=0.01,
+\label{eq:fraction_evidence}
+\end{align}
+where $\mathcal{M}_{ct}\subseteq\mathcal{M}_c$ contains responses observed at
+time $t$. The primary cross-asset detector uses
+$A_{ct}=A^{\mathrm{frac}}_{ct}$ because it measures the breadth of simultaneous
+channel departures and is less dominated by a single extreme residual.
+
+For every candidate quantile $q$, a case-specific point threshold is derived
+from the corresponding out-of-fold aggregate scores,
+\begin{equation}
+\tau_c(q)=\operatorname{Quantile}_{q}
+\left(\{A^{\mathrm{cal}}_{ct}\}_{t\in\mathcal{T}^{\mathrm{tr}}_c}\right),
+\qquad
+I_{ct}(q)=\mathbf{1}\!\left(A^{\mathrm{pr}}_{ct}>\tau_c(q)\right).
+\label{eq:point_firing}
+\end{equation}
+This first calibration layer removes case-specific score units. The second,
+cross-asset layer below selects $q$ according to the behavior of the complete
+persistent-alarm process rather than pointwise exceedance alone.
+
+\subsection{Persistence-sensitive criticality}
+
+Isolated SCADA deviations should not trigger a case-level alarm. UC-RCF converts
+the binary firing sequence into a reflected random walk. After retaining only
+normal-status prediction rows in chronological order, define
+\begin{equation}
+d_{ct}(q)=2I_{ct}(q)-1,
+\qquad
+C_{ct}(q)=\max\{0,C_{c,t-1}(q)+d_{ct}(q)\},
+\qquad C_{c0}=0.
+\label{eq:criticality_recursion}
+\end{equation}
+The equivalent closed form is
+$C_{ct}=S_{ct}-\min_{0\leq u\leq t}S_{cu}$, where
+$S_{ct}=\sum_{v\leq t}d_{cv}$ and $S_{c0}=0$. A case alarm is declared when
+\begin{equation}
+\max_{t}C_{ct}(q)\geq H,\qquad H=72.
+\label{eq:case_alarm}
+\end{equation}
+The $+1/-1$ update rewards sustained evidence and erases sporadic firings. The
+counter is frozen when the operating-status filter is not satisfied, and no
+post-alarm latching is applied.
+
+\subsection{Cross-asset calibration of the alarm process}
+
+Pointwise conformal ranks do not by themselves control the probability that a
+long, dependent sequence crosses $H$. Moreover, the calibration and prediction
+partitions may exhibit asset-dependent covariate shift. UC-RCF therefore
+calibrates the complete criticality process using prediction-period sequences
+from verified-normal donor cases.
+
+Consider an outer fold that holds out asset $b$ and a target case $c$. The donor
+set is
+\begin{equation}
+\mathcal{D}_{c,b}=
+\left\{d\in\mathcal{C}: d\text{ is normal},\,
+a(d)\neq b,\,a(d)\neq a(c)\right\}.
+\label{eq:donor_set}
+\end{equation}
+The first exclusion protects the outer test asset; the second prevents a target
+case from borrowing its own turbine's prediction behavior during calibration.
+For each $q$ in
+\begin{equation*}
+\mathcal{Q}=\{0.70,0.80,0.85,0.90,0.925,0.95,0.965,0.98,0.99,0.995\},
+\end{equation*}
+the donor firing sequences are partitioned into windows with target-matched
+length $L_c=\max(|\mathcal{T}^{\mathrm{pr,N}}_c|,200)$ and 144-sample stride.
+If a donor is shorter than $L_c$, its full available sequence is used. Let
+$M_{d\ell}(q)$ denote the maximum criticality in donor window $\ell$. The
+empirical case-level null risk is
+\begin{equation}
+\widehat{\pi}_{c,b}(q)=
+\frac{1}{N_{c,b}(q)}
+\sum_{d\in\mathcal{D}_{c,b}}\sum_{\ell}
+\mathbf{1}\!\left(M_{d\ell}(q)\geq H\right),
+\label{eq:null_false_alarm}
+\end{equation}
+where $N_{c,b}(q)$ is the number of available donor windows. For a nominal
+case-level false-alarm budget $\alpha$, UC-RCF selects the loosest admissible
+point threshold,
+\begin{equation}
+q^{\star}_{c,b}(\alpha)=
+\min\left\{q\in\mathcal{Q}:\widehat{\pi}_{c,b}(q)\leq\alpha\right\}.
+\label{eq:q_selection}
+\end{equation}
+If no candidate satisfies the budget, $q=0.995$ is used and the case is marked
+as calibration-infeasible. This flag is retained for the validity audit.
+
+\subsection{Nested leave-one-asset-out policy selection}
+
+The nominal budget is treated as an operating policy rather than tuned on a
+held-out asset. For outer fold $b$, candidate values are
+\begin{equation*}
+\mathcal{A}=\{0.02,0.05,0.10,0.15,0.20,0.30,0.40,0.50,0.60\}.
+\end{equation*}
+For each $\alpha\in\mathcal{A}$, Eq.~\eqref{eq:q_selection} is recomputed with
+asset $b$ excluded. The selected policy is
+\begin{equation}
+\alpha_b^{\star}=
+\underset{\alpha\in\mathcal{A}}{\operatorname*{arg\,max}}
+\;\operatorname{CARE}
+\left(\mathcal{C}\setminus\{c:a(c)=b\};\alpha\right),
+\label{eq:outer_policy}
+\end{equation}
+with deterministic grid-order tie breaking. Only then is
+$\alpha_b^{\star}$ applied to cases belonging to $b$. The final endpoint pools
+the predictions produced when each asset is held out. Any detector variant or
+residual-scale configuration selected from labels must be nested in the same
+outer loop; alternatively, it must be fixed before outer evaluation. This rule
+is essential because asset-disjoint policy selection alone cannot correct a
+globally outcome-selected model configuration.
+
+The full procedure is summarized as follows:
+\begin{enumerate}
+    \item For each case, construct Eq.~\eqref{eq:nonlinear_design} using normal
+    training statistics only.
+    \item Generate embargoed out-of-fold residuals, select
+    $\lambda_c^{\star}$ and $\mathcal{M}_c$, and refit the multi-output model on
+    all normal training rows.
+    \item Compute Eqs.~\eqref{eq:regularized_leverage}--\eqref{eq:fraction_evidence}
+    on the calibration and prediction partitions.
+    \item For each outer held-out asset and candidate $\alpha$, build donor
+    null windows, select $q^{\star}_{c,b}(\alpha)$, and form the criticality
+    trajectory for every case.
+    \item Select $\alpha_b^{\star}$ using development assets only, apply it to
+    the held-out asset, and pool all held-out predictions exactly once.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Fixed UC-RCF settings used in the proposed method.}
+\label{tab:ucrcf_settings}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lll}
+\toprule
+Component & Setting & Interpretation \\
+\midrule
+Input statistic & average channels only & common SCADA statistic \\
+Normal status IDs & $\{0,2\}$ & model-fitting and alarm-update filter \\
+Cross-fitting & 5 folds; 432-sample blocks & 3-day contiguous blocks \\
+Embargo & 144 samples & 24~h around held blocks \\
+Rolling windows & $\{6,36,144\}$ & 1, 6, and 24~h context \\
+Core drivers & at most 6 & interactions and rolling terms \\
+Minimum fit size & 3000 rows & case inclusion requirement \\
+Target screen & out-of-fold $R^2\geq0.30$ & minimum predictability \\
+Channel level $\gamma$ & 0.01 & fraction-evidence statistic \\
+Criticality threshold $H$ & 72 & persistent-alarm boundary \\
+Null-window stride & 144 samples & 24~h between window starts \\
+Post-alarm latching & disabled & trajectory remains observable \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Interpretation and scope of calibration}
+
+The rank construction in Eq.~\eqref{eq:conformal_pvalue} is distribution-free
+only under exchangeability of the standardized residuals used for calibration
+and prediction. Serial dependence and cross-asset distribution shift prevent an
+automatic finite-sample guarantee at the case-alarm level. UC-RCF does not hide
+this limitation behind the term ``conformal.'' Instead, it uses asset-disjoint
+prediction-period null sequences to target the operational false-alarm budget
+and reports both the observed false-alarm rate and its ratio to the nominal
+budget. Consequently, the method separates three questions that are often
+conflated: whether a channel residual is unusual, whether unusual evidence is
+persistent, and whether the resulting alarm process transfers to a different
+turbine.

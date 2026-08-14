@@ -1,0 +1,377 @@
+\documentclass[10pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{microtype}
+\usepackage{placeins}
+
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+
+\begin{document}
+
+% ========================== Main results ==========================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Pooled outer-fold official CARE for all methods under an
+identical leave-one-asset-out evaluation protocol.}
+\label{tab:main}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Method
+& CARE
+& $\bar{F}_{0.5}$
+& $\overline{WS}$
+& $EF_{0.5}$
+& Acc.
+& TA
+& FA
+& Missed \\
+\midrule
+exp01 contract (aleatoric + support)
+& 0.5561
+& 0.3719
+& 0.1893
+& 0.5366
+& 0.8413
+& 22
+& 18
+& 23 \\
+Fixed-$q$, no aleatoric head
+& 0.5643
+& 0.4794
+& 0.3605
+& 0.4949
+& 0.7433
+& 29
+& 33
+& 16 \\
+Univariate
+& 0.5225
+& 0.3234
+& 0.1731
+& 0.4525
+& 0.8317
+& 20
+& 24
+& 25 \\
+PCA
+& 0.5773
+& 0.3122
+& 0.2420
+& 0.5525
+& 0.8899
+& 20
+& 14
+& 25 \\
+Mahalanobis
+& 0.6012
+& 0.2932
+& 0.2411
+& 0.6364
+& 0.9176
+& 21
+& 9
+& 24 \\
+\midrule
+UC-RCF cross-asset (proposed)
+& 0.5903
+& 0.3920
+& 0.2423
+& 0.5760
+& 0.8706
+& 25
+& 18
+& 20 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+% =========================== Ablation =============================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Residual-scale ablation. The aleatoric head costs
+approximately $0.022$ CARE in both pairings; the support term changes
+CARE by approximately $\pm 0.002$.}
+\label{tab:ablation}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrr}
+\toprule
+Variant
+& CARE
+& $\bar{F}_{0.5}$
+& $\overline{WS}$
+& $EF_{0.5}$
+& Acc. \\
+\midrule
+no\_aleatoric
+& 0.5643
+& 0.4794
+& 0.3605
+& 0.4949
+& 0.7433 \\
+plain
+& 0.5620
+& 0.4646
+& 0.3384
+& 0.5119
+& 0.7476 \\
+no\_support
+& 0.5410
+& 0.4062
+& 0.2567
+& 0.4852
+& 0.7785 \\
+full
+& 0.5409
+& 0.4064
+& 0.2571
+& 0.4852
+& 0.7779 \\
+gauss
+& 0.5402
+& 0.3968
+& 0.2272
+& 0.4852
+& 0.7958 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+% ======================== Alpha sweep =============================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{CARE components against the nominal false-alarm budget.
+The CARE optimum occurs at an observed case-level false-alarm rate
+of 36\%.}
+\label{tab:alpha}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrrrr}
+\toprule
+$\alpha$
+& CARE
+& Acc.
+& $EF_{0.5}$
+& $\bar{F}_{0.5}$
+& $\overline{WS}$
+& obs.\ FA
+& obs./nom. \\
+\midrule
+0.02
+& 0.4198
+& 0.9835
+& 0.0820
+& 0.0427
+& 0.0073
+& 0.0600
+& 3.0000 \\
+0.05
+& 0.4208
+& 0.9770
+& 0.0769
+& 0.0618
+& 0.0115
+& 0.0800
+& 1.6000 \\
+0.10
+& 0.4836
+& 0.9554
+& 0.3093
+& 0.1557
+& 0.0421
+& 0.1400
+& 1.4000 \\
+0.15
+& 0.5377
+& 0.9495
+& 0.4701
+& 0.2242
+& 0.0953
+& 0.1400
+& 0.9333 \\
+0.20
+& 0.5551
+& 0.9190
+& 0.5152
+& 0.2781
+& 0.1442
+& 0.2600
+& 1.3000 \\
+0.30
+& 0.5905
+& 0.8711
+& 0.5760
+& 0.3920
+& 0.2423
+& 0.3600
+& 1.2000 \\
+0.40
+& 0.5862
+& 0.8126
+& 0.5642
+& 0.4256
+& 0.3158
+& 0.4800
+& 1.2000 \\
+0.50
+& 0.5823
+& 0.7455
+& 0.5576
+& 0.4657
+& 0.3973
+& 0.5200
+& 1.0400 \\
+0.60
+& 0.5445
+& 0.6317
+& 0.4984
+& 0.4903
+& 0.4705
+& 0.7400
+& 1.2333 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+\FloatBarrier
+
+% ===================== Conformal validity =========================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Conformal validity under the cross-asset null.}
+\label{tab:validity}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrr}
+\toprule
+$\alpha$
+& obs.\ FA
+& obs./nom.
+& detect.
+& median $q$ \\
+\midrule
+0.02 & 0.0600 & 3.0000 & 0.0222 & 0.9950 \\
+0.05 & 0.0800 & 1.6000 & 0.0222 & 0.9950 \\
+0.10 & 0.1400 & 1.4000 & 0.1333 & 0.9800 \\
+0.15 & 0.1400 & 0.9333 & 0.2444 & 0.9800 \\
+0.20 & 0.2600 & 1.3000 & 0.3778 & 0.9650 \\
+0.30 & 0.3600 & 1.2000 & 0.5556 & 0.9250 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+% =========================== AUC study =============================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Case-level AUC for residual magnitude and residual
+correlation structure.}
+\label{tab:corr}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrr}
+\toprule
+Statistic
+& Pooled
+& Farm A
+& Farm B
+& Farm C \\
+\midrule
+corr\_ratio
+& 0.710
+& 0.850
+& 0.759
+& 0.694 \\
+corr\_farmnorm
+& 0.738
+& 0.850
+& 0.759
+& 0.694 \\
+plain\_farmnorm
+& 0.854
+& 0.825
+& 0.815
+& 0.878 \\
+combo
+& 0.838
+& 0.938
+& 0.796
+& 0.818 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+% ========================= Fusion effect ===========================
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Within-farm bootstrap analysis of the fusion effect using
+4000 resamples. The fusion effect is not established on Farm~A and
+degrades performance on Farm~C according to the one-sided bootstrap
+probability.}
+\label{tab:fusion}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrrr}
+\toprule
+Farm
+& Magnitude
+& Fusion
+& $\Delta$
+& 2.5\%
+& 97.5\%
+& $P(\Delta>0)$ \\
+\midrule
+wind\_farm\_a
+& 0.823
+& 0.938
+& 0.115
+& $-0.058$
+& 0.317
+& 0.889 \\
+wind\_farm\_b
+& 0.815
+& 0.798
+& $-0.017$
+& $-0.157$
+& 0.111
+& 0.323 \\
+wind\_farm\_c
+& 0.879
+& 0.818
+& $-0.061$
+& $-0.132$
+& 0.003
+& 0.030 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\FloatBarrier
+
+\end{document}
